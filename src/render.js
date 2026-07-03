@@ -23,7 +23,7 @@ const fonts = [
 ];
 
 const LAYOUT_WIDTH = 738; // design is authored at this width
-const OUT_WIDTH = 960; // final image width (height scales by aspect)
+const OUT_WIDTH = 1080; // final image width (height scales by aspect)
 const SCALE = 2; // supersample: rasterize at 2x then downscale for crisp text/edges
 
 async function renderWebp(model, opts = {}) {
@@ -41,7 +41,9 @@ async function renderWebp(model, opts = {}) {
     .asPng();
   return sharp(png)
     .resize({ width: OUT_WIDTH, kernel: "lanczos3" }) // downscale the supersampled raster
-    .webp({ quality: 92, alphaQuality: 100, effort: 5 })
+    // effort is encode-speed vs compression (NOT visual quality). 6 costs ~2s
+    // for ~1% smaller file here — not worth it; 4 is ~36ms at the same size.
+    .webp({ quality: 90, alphaQuality: 100, effort: 4 })
     .toBuffer();
 }
 
