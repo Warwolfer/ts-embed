@@ -22,7 +22,8 @@ const fonts = [
   },
 ];
 
-const WIDTH = 738;
+const LAYOUT_WIDTH = 738; // design is authored at this width
+const OUT_WIDTH = 960; // final image width (height scales by aspect)
 const SCALE = 2; // supersample: rasterize at 2x then downscale for crisp text/edges
 
 async function renderWebp(model, opts = {}) {
@@ -31,15 +32,15 @@ async function renderWebp(model, opts = {}) {
     flat: !!opts.flat,
     gold: !!opts.gold,
   });
-  const svg = await satori(tree, { width: WIDTH, fonts });
+  const svg = await satori(tree, { width: LAYOUT_WIDTH, fonts });
   const png = new Resvg(svg, {
     background: "rgba(0,0,0,0)", // transparent
-    fitTo: { mode: "width", value: WIDTH * SCALE },
+    fitTo: { mode: "width", value: OUT_WIDTH * SCALE }, // scale layout up + supersample
   })
     .render()
     .asPng();
   return sharp(png)
-    .resize({ width: WIDTH, kernel: "lanczos3" }) // downscale the 2x raster
+    .resize({ width: OUT_WIDTH, kernel: "lanczos3" }) // downscale the supersampled raster
     .webp({ quality: 92, alphaQuality: 100, effort: 5 })
     .toBuffer();
 }
