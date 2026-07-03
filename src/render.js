@@ -23,6 +23,7 @@ const fonts = [
 ];
 
 const WIDTH = 738;
+const SCALE = 2; // supersample: rasterize at 2x then downscale for crisp text/edges
 
 async function renderWebp(model, opts = {}) {
   const tree = await template(model, {
@@ -33,11 +34,14 @@ async function renderWebp(model, opts = {}) {
   const svg = await satori(tree, { width: WIDTH, fonts });
   const png = new Resvg(svg, {
     background: "rgba(0,0,0,0)", // transparent
-    fitTo: { mode: "width", value: WIDTH },
+    fitTo: { mode: "width", value: WIDTH * SCALE },
   })
     .render()
     .asPng();
-  return sharp(png).webp({ quality: 82, alphaQuality: 100 }).toBuffer();
+  return sharp(png)
+    .resize({ width: WIDTH, kernel: "lanczos3" }) // downscale the 2x raster
+    .webp({ quality: 92, alphaQuality: 100, effort: 5 })
+    .toBuffer();
 }
 
 module.exports = { renderWebp };
