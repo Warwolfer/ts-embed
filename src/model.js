@@ -82,10 +82,11 @@ function buildFromData(d) {
   return { masteries, expertise, saves, gear, actions };
 }
 
-// Decode once; return the render model + a char-data-independent cache key.
+// Decode once; return the render model, a char-data-independent cache key, and
+// the canonical short code (base64url) this build should live at.
 function buildRender(code) {
   const d = bd.decode(code); // throws InvalidBuildError on bad input
-  return { model: buildFromData(d), key: imageKey(d) };
+  return { model: buildFromData(d), key: imageKey(d), canonical: bd.canonicalCode(d) };
 }
 
 // Kept for tests / callers that just want the model.

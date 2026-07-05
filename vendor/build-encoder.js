@@ -2,7 +2,7 @@
 
 const BuildEncoder = {
   // Generate compact build code using mastery IDs (much shorter format)
-  generateCompactBuildCode(state, baseURL = "https://terrarp.com/build/") {
+  generateCompactBuildCode(state, baseURL = "https://terrarp.com/build/", opts = {}) {
     // Detect if we're currently on index.html to determine target page
     const currentPath = window.location.pathname;
     const isOnIndexPage =
@@ -110,7 +110,9 @@ const BuildEncoder = {
       charParts.push("ng:1");
     }
 
-    const charData = charParts.join("&");
+    // The embed image doesn't use character data (name/title/notes/thread code/
+    // banner/avatar/ng), so callers can omit it for a much shorter code.
+    const charData = opts.omitCharData ? "" : charParts.join("&");
 
     // Create ultra-compact build string (new format with expertise and accessory)
     // NOTE: do NOT filter empty parts — the decoder uses fixed indices (0-10).
@@ -143,6 +145,18 @@ const BuildEncoder = {
       ),
     );
     return baseURL + targetPage + hashType + encodedBuild;
+  },
+
+  // Build code for the forum embed image: same compact format but with the
+  // character-data segment omitted (name/title/notes/thread code/banner/avatar/
+  // ng). Returns just the encoded blob (the part after "#import."), not a URL.
+  generateEmbedCode(state) {
+    const url = this.generateCompactBuildCode(state, "https://terrarp.com/build/", {
+      omitCharData: true,
+    });
+    const b64 = url.split("#import.")[1] || "";
+    // base64url so the code is URL-path-safe (no + / =) and needs no encoding.
+    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   },
 
   // Generate JSON-based build code (most compact and reliable)

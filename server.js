@@ -51,7 +51,18 @@ function buildServer() {
     try {
       // Decode up front so the cache key ignores character data + encoding:
       // full and short codes for the same build share one cache entry.
-      const { model, key: imgKey } = buildRender(code); // throws InvalidBuildError
+      const { model, key: imgKey, canonical } = buildRender(code); // throws InvalidBuildError
+
+      // Redirect any non-canonical code (full / padded / base64) to the short
+      // canonical URL so the address bar + downstream caches converge on it.
+      const incoming = raw.replace(/=+$/, ""); // compare ignoring padding
+      if (incoming !== canonical) {
+        const qs = req.raw.url.split("?")[1] || "";
+        const dest = `/embed/${canonical}.webp${qs ? "?" + qs : ""}`;
+        reply.header("Cache-Control", "public, max-age=31536000").code(301);
+        return reply.redirect(dest);
+      }
+
       const key = sha(imgKey + flagKey);
       const buf = await getOrRender(key, () => renderWebp(model, { mono, flat, gold }));
       reply

@@ -69,8 +69,15 @@ function decode(code) {
   return result;
 }
 
+// Canonical short embed code (base64url, char data stripped) for a decoded
+// build. Idempotent: canonicalCode(decode(canonicalCode(d))) === canonicalCode(d).
+function canonicalCode(data) {
+  return BuildEncoder.generateEmbedCode(data);
+}
+
 module.exports = {
   decode,
+  canonicalCode,
   masteries,
   expertise,
   actionlist,

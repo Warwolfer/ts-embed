@@ -8,4 +8,4 @@ Re-copy these when they change upstream. Source paths (in ts-builder):
 - build-encoder.js   <- shared/build-encoder.js
 - calculations.js    <- shared/calculations.js
 
-Copied at ts-builder commit: 56dfa69
+Copied at ts-builder commit: 37f854d
