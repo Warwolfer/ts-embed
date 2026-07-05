@@ -35,7 +35,7 @@ test("full code 301-redirects to the shorter canonical url", async () => {
   });
   assert.strictEqual(res.statusCode, 301);
   const loc = res.headers["location"];
-  assert.match(loc, /^\/embed\/[A-Za-z0-9_-]+\.webp\?gold=1$/);
+  assert.match(loc, /^\/embed\/~[A-Za-z0-9_-]+\.webp\?gold=1$/);
   assert.ok(loc.length < FULL.length, "canonical url is shorter");
   // following it renders a webp (canonical serves directly, no further redirect)
   const res2 = await app.inject({ method: "GET", url: loc });

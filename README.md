@@ -19,8 +19,12 @@ pnpm start             # or: pm2 start ecosystem.config.js
 GET /embed/{code}.webp
 ```
 
-- `{code}` is the base64 build code (the segment after `#import.` in a build
-  URL), URL-encoded.
+- `{code}` is an **embedcode**: `~` + base64url of a bit-packed payload
+  (masteries+ranks, expertise+ranks, equipment, actions) — a dedicated
+  embed-only format (see `vendor/embedcode.js`), ~35 chars, NOT the builder's
+  build code. Legacy builder codes (base64/base64url of the compact string,
+  full or stripped) are still accepted and **301-redirect** to the canonical
+  `~` embedcode.
 - Returns `image/webp` with `Cache-Control: public, max-age=31536000, immutable`.
 - Invalid/undecodable code → the `assets/invalid.webp` placeholder with
   `Cache-Control: no-store`, still HTTP 200 (so the forum shows something).

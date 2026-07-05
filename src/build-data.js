@@ -21,6 +21,7 @@ require(V("expertise.js")); // window.expertise
 require(V("actions.js")); // window.actionlist
 require(V("build-encoder.js")); // window.BuildEncoder
 require(V("calculations.js")); // window.CharacterCalculations
+const EmbedCode = require(V("embedcode.js")); // bit-packed embed format
 
 const BuildEncoder = global.window.BuildEncoder;
 const masteries = global.window.masteries;
@@ -45,12 +46,30 @@ class InvalidBuildError extends Error {
 
 // decodeBuildString returns the data object directly on success, or
 // { success:false, error } on failure. Normalize to "data object or throw".
+const REFS = {
+  masteries,
+  expertise,
+  actionlist,
+};
+
 function decode(code) {
   if (typeof code !== "string" || code.length === 0) {
     throw new InvalidBuildError("empty code");
   }
-  // Accept base64url (from the embed client) as well as standard base64.
-  // Converting is a no-op for standard base64 (it has no - or _, and is padded).
+
+  // New embedcode format ("~" + base64url bit-pack).
+  if (EmbedCode.isEmbedCode(code)) {
+    try {
+      const d = EmbedCode.decode(code, REFS);
+      if (!Array.isArray(d.chosenMasteries)) throw new Error("no masteries");
+      return d;
+    } catch (e) {
+      throw new InvalidBuildError(e.message);
+    }
+  }
+
+  // Legacy: a builder build/share code (base64 or base64url of the compact
+  // string, full or char-stripped). Kept so old embed URLs still render.
   let normalized = code.replace(/-/g, "+").replace(/_/g, "/");
   while (normalized.length % 4 !== 0) normalized += "=";
   let result;
@@ -72,7 +91,7 @@ function decode(code) {
 // Canonical short embed code (base64url, char data stripped) for a decoded
 // build. Idempotent: canonicalCode(decode(canonicalCode(d))) === canonicalCode(d).
 function canonicalCode(data) {
-  return BuildEncoder.generateEmbedCode(data);
+  return EmbedCode.encode(data, REFS);
 }
 
 module.exports = {
