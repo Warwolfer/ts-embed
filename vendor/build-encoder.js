@@ -91,30 +91,43 @@ const BuildEncoder = {
       charParts.push("t:" + characterTitle.replace(/ /gi, "_"));
     if (threadCode) charParts.push("c:" + threadCode.replace(/ /gi, "_"));
     if (state.note) charParts.push("note:" + encodeURIComponent(state.note));
-    if (state.profileBannerUrl) {
-      // Extract just the unique part from terrarp banner URLs to save space
-      // From: https://terrarp.com/data/profile_banners/l/0/135.jpg?1718997316
-      // To: 135.jpg?1718997316
-      const bannerMatch = state.profileBannerUrl.match(
-        /\/profile_banners\/[^\/]+\/[^\/]+\/(.+)$/,
-      );
-      const shortBanner = bannerMatch
-        ? bannerMatch[1]
-        : encodeURIComponent(state.profileBannerUrl);
-      charParts.push("b:" + shortBanner);
-    }
+    // Avatar and banner are the same user's profile images, both named after
+    // the user id (avatars/{size}/{shard}/{id}.jpg,
+    // profile_banners/{size}/{shard}/{id}.jpg). Store the id and reconstruct the
+    // URLs on decode (dropping the cache-bust timestamp, which is not needed).
+    // When the banner id matches the avatar id (the normal case), store "b:^" to
+    // reuse the avatar id instead of repeating it.
+    const idFrom = (url, dir) => {
+      const m =
+        url &&
+        url.match(
+          new RegExp("/" + dir + "/[^/]+/[^/]+/(\\d+)\\.(?:jpg|png|gif|webp)", "i"),
+        );
+      return m ? m[1] : null;
+    };
+    const avatarId = idFrom(state.avatarUrl, "avatars");
+    const bannerId = idFrom(state.profileBannerUrl, "profile_banners");
+
     if (state.avatarUrl) {
-      // Store just the user id when the avatar is a standard terrarp avatar URL
-      // (https://terrarp.com/data/avatars/{size}/{shard}/{id}.jpg?ts). The full
-      // URL is reconstructed on decode. Fall back to the encoded URL otherwise.
-      const avatarMatch = state.avatarUrl.match(
-        /\/avatars\/[^\/]+\/[^\/]+\/(\d+)\.(?:jpg|png|gif|webp)/i,
-      );
       charParts.push(
-        avatarMatch
-          ? "a:" + avatarMatch[1]
-          : "a:" + encodeURIComponent(state.avatarUrl),
+        avatarId ? "a:" + avatarId : "a:" + encodeURIComponent(state.avatarUrl),
       );
+    }
+    if (state.profileBannerUrl) {
+      if (bannerId && bannerId === avatarId) {
+        charParts.push("b:^"); // reuse avatar id
+      } else if (bannerId) {
+        charParts.push("b:" + bannerId);
+      } else {
+        // Legacy fallback: store the URL tail (135.jpg?ts) or the encoded URL.
+        const bannerMatch = state.profileBannerUrl.match(
+          /\/profile_banners\/[^\/]+\/[^\/]+\/(.+)$/,
+        );
+        charParts.push(
+          "b:" +
+            (bannerMatch ? bannerMatch[1] : encodeURIComponent(state.profileBannerUrl)),
+        );
+      }
     }
     if (ng === 1) {
       charParts.push("ng:1");
@@ -406,6 +419,8 @@ const BuildEncoder = {
         threadCode = "",
         profileBannerUrl = "",
         avatarUrl = "",
+        avatarId = null,
+        bannerRaw = null,
         note = "",
         ng = 0;
       if (parts[charDataIndex]) {
@@ -425,6 +440,7 @@ const BuildEncoder = {
             const av = part.substring(2);
             if (/^\d+$/.test(av)) {
               // New compact form: bare user id -> reconstruct medium avatar URL.
+              avatarId = av;
               const shard = Math.floor(parseInt(av, 10) / 1000);
               avatarUrl = `https://terrarp.com/data/avatars/m/${shard}/${av}.jpg`;
             } else {
@@ -433,19 +449,24 @@ const BuildEncoder = {
             }
           }
           if (part.startsWith("ng:")) ng = parseInt(part.substring(3)) || 0;
-          if (part.startsWith("b:")) {
-            const shortBanner = part.substring(2);
-            // Reconstruct full terrarp banner URL from shortened form
-            // From: 135.jpg?1718997316
-            // To: https://terrarp.com/data/profile_banners/l/0/135.jpg?1718997316
-            if (shortBanner.includes(".jpg") || shortBanner.includes(".png")) {
-              profileBannerUrl = `https://terrarp.com/data/profile_banners/l/0/${shortBanner}`;
-            } else {
-              // Fallback for non-standard URLs
-              profileBannerUrl = decodeURIComponent(shortBanner);
-            }
-          }
+          // Defer banner: "b:^" reuses the avatar id, which may parse later.
+          if (part.startsWith("b:")) bannerRaw = part.substring(2);
         });
+
+        // Resolve banner after the loop so "b:^" can reference the avatar id.
+        if (bannerRaw != null) {
+          const bId = bannerRaw === "^" ? avatarId : bannerRaw;
+          if (bId && /^\d+$/.test(bId)) {
+            // Compact form: user id -> reconstruct large banner URL.
+            const shard = Math.floor(parseInt(bId, 10) / 1000);
+            profileBannerUrl = `https://terrarp.com/data/profile_banners/l/${shard}/${bId}.jpg`;
+          } else if (bannerRaw.includes(".jpg") || bannerRaw.includes(".png")) {
+            // Legacy form: URL tail (135.jpg?ts).
+            profileBannerUrl = `https://terrarp.com/data/profile_banners/l/0/${bannerRaw}`;
+          } else {
+            profileBannerUrl = decodeURIComponent(bannerRaw);
+          }
+        }
       }
 
       return {
