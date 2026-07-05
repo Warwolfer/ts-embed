@@ -4,7 +4,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const Fastify = require("fastify");
-const { buildModel, InvalidBuildError } = require("./src/model.js");
+const { buildRender, InvalidBuildError } = require("./src/model.js");
 const { renderWebp } = require("./src/render.js");
 const { getOrRender } = require("./src/lru.js");
 
@@ -43,18 +43,17 @@ function buildServer() {
     }
 
     const code = decodeURIComponent(raw);
-    const key = sha(
-      code +
-        "|mono=" + (mono ? "1" : "0") +
-        "|flat=" + (flat ? "1" : "0") +
-        "|gold=" + (gold ? "1" : "0"),
-    );
+    const flagKey =
+      "|mono=" + (mono ? "1" : "0") +
+      "|flat=" + (flat ? "1" : "0") +
+      "|gold=" + (gold ? "1" : "0");
 
     try {
-      const buf = await getOrRender(key, async () => {
-        const model = buildModel(code); // throws InvalidBuildError
-        return renderWebp(model, { mono, flat, gold });
-      });
+      // Decode up front so the cache key ignores character data + encoding:
+      // full and short codes for the same build share one cache entry.
+      const { model, key: imgKey } = buildRender(code); // throws InvalidBuildError
+      const key = sha(imgKey + flagKey);
+      const buf = await getOrRender(key, () => renderWebp(model, { mono, flat, gold }));
       reply
         .header("Content-Type", "image/webp")
         .header("Cache-Control", IMMUTABLE);

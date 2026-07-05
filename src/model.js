@@ -18,9 +18,25 @@ const abbr = (name) =>
     .replace(/^Ultra /, "U. ")
     .replace(/^Special /, "Sp. ");
 
-function buildModel(code) {
-  const d = bd.decode(code); // throws InvalidBuildError on bad input
+// Canonical cache key from only the fields that affect the image — ignores
+// character data (name/title/notes/thread/banner/avatar/ng) and the encoding,
+// so a full code and a stripped short code for the same build share one entry.
+function imageKey(d) {
+  return JSON.stringify([
+    d.chosenMasteries,
+    d.chosenMasteriesRanks,
+    d.chosenExpertise,
+    d.chosenExpertiseRanks,
+    d.armorType,
+    d.armorRank,
+    d.accessoryType,
+    d.accessoryRank,
+    d.weaponRank,
+    d.chosenActions,
+  ]);
+}
 
+function buildFromData(d) {
   const masteries = d.chosenMasteries.map((lookup, i) => {
     const o = M.get(lookup) || {};
     return {
@@ -66,4 +82,15 @@ function buildModel(code) {
   return { masteries, expertise, saves, gear, actions };
 }
 
-module.exports = { buildModel, InvalidBuildError: bd.InvalidBuildError };
+// Decode once; return the render model + a char-data-independent cache key.
+function buildRender(code) {
+  const d = bd.decode(code); // throws InvalidBuildError on bad input
+  return { model: buildFromData(d), key: imageKey(d) };
+}
+
+// Kept for tests / callers that just want the model.
+function buildModel(code) {
+  return buildFromData(bd.decode(code));
+}
+
+module.exports = { buildModel, buildRender, InvalidBuildError: bd.InvalidBuildError };
