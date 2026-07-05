@@ -90,7 +90,15 @@ const BuildEncoder = {
     if (characterTitle)
       charParts.push("t:" + characterTitle.replace(/ /gi, "_"));
     if (threadCode) charParts.push("c:" + threadCode.replace(/ /gi, "_"));
-    if (state.note) charParts.push("note:" + encodeURIComponent(state.note));
+    if (state.note) {
+      // Store spaces raw (space is not a delimiter here; delimiters |, &, : stay
+      // percent-escaped by encodeURIComponent). Decode via decodeURIComponent is
+      // unchanged — it passes a raw space through, and still turns %20 (old
+      // codes) into a space. Saves ~2 chars per space.
+      charParts.push(
+        "note:" + encodeURIComponent(state.note).replace(/%20/g, " "),
+      );
+    }
     // Avatar and banner are the same user's profile images, both named after
     // the user id (avatars/{size}/{shard}/{id}.jpg,
     // profile_banners/{size}/{shard}/{id}.jpg). Store the id and reconstruct the
