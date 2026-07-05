@@ -49,9 +49,13 @@ function decode(code) {
   if (typeof code !== "string" || code.length === 0) {
     throw new InvalidBuildError("empty code");
   }
+  // Accept base64url (from the embed client) as well as standard base64.
+  // Converting is a no-op for standard base64 (it has no - or _, and is padded).
+  let normalized = code.replace(/-/g, "+").replace(/_/g, "/");
+  while (normalized.length % 4 !== 0) normalized += "=";
   let result;
   try {
-    result = BuildEncoder.decodeBuildString(code);
+    result = BuildEncoder.decodeBuildString(normalized);
   } catch (e) {
     throw new InvalidBuildError(e.message);
   }

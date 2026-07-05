@@ -29,6 +29,14 @@ test("getRankLabel maps rank index to letter", () => {
   assert.strictEqual(bd.getRankLabel(99), "E");
 });
 
+test("decodes base64url form (from the embed client) identically", () => {
+  const urlSafe = FIXTURE.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  const a = bd.decode(FIXTURE);
+  const b = bd.decode(urlSafe);
+  assert.deepStrictEqual(b.chosenMasteries, a.chosenMasteries);
+  assert.strictEqual(b.weaponRank, a.weaponRank);
+});
+
 test("bad code throws InvalidBuildError", () => {
   assert.throws(() => bd.decode("not-a-real-code"), bd.InvalidBuildError);
 });
