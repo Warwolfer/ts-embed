@@ -40,8 +40,18 @@ Mastery icons (role-colored ring + rank badge), expertise icons (type-colored
 ring + rank), saves + gear pills (armor shows its type), and action pills
 (bottom border in the action's type color). Universal actions (`attack`,
 `rush`) are omitted; action names abbreviate `Power `→`P. `, `Ultra `→`U. `,
-`Special `→`Sp. `. No character name or avatar (the server never fetches
-user-supplied URLs — only mastery/expertise icon PNGs keyed by lookup).
+`Special `→`Sp. `. No character name or avatar.
+
+## Icons
+
+Mastery/expertise icons are **bundled locally** in `assets/icons/{mastery,expertise}/`
+(basenames match the terrarp URLs, e.g. `w-power.png`, `s-music.png`).
+`src/icons.js` maps each `mastery.image` / `expertise.image` URL to the local
+file; a remote fetch is only a fallback for anything not bundled. terrarp's CDN
+returns 415 to non-browser clients, so runtime fetching is unreliable — keep the
+bundle current. To refresh (e.g. new masteries added upstream): open
+`https://terrarp.com/build` in a browser, fetch each icon same-origin, and drop
+the PNGs into `assets/icons/` (basename = the icon's URL filename).
 
 ## Caching
 
