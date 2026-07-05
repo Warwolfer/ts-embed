@@ -104,7 +104,17 @@ const BuildEncoder = {
       charParts.push("b:" + shortBanner);
     }
     if (state.avatarUrl) {
-      charParts.push("a:" + encodeURIComponent(state.avatarUrl));
+      // Store just the user id when the avatar is a standard terrarp avatar URL
+      // (https://terrarp.com/data/avatars/{size}/{shard}/{id}.jpg?ts). The full
+      // URL is reconstructed on decode. Fall back to the encoded URL otherwise.
+      const avatarMatch = state.avatarUrl.match(
+        /\/avatars\/[^\/]+\/[^\/]+\/(\d+)\.(?:jpg|png|gif|webp)/i,
+      );
+      charParts.push(
+        avatarMatch
+          ? "a:" + avatarMatch[1]
+          : "a:" + encodeURIComponent(state.avatarUrl),
+      );
     }
     if (ng === 1) {
       charParts.push("ng:1");
@@ -151,12 +161,15 @@ const BuildEncoder = {
   // character-data segment omitted (name/title/notes/thread code/banner/avatar/
   // ng). Returns just the encoded blob (the part after "#import."), not a URL.
   generateEmbedCode(state) {
-    const url = this.generateCompactBuildCode(state, "https://terrarp.com/build/", {
-      omitCharData: true,
+    // Dedicated bit-packed embed format (see shared/embedcode.js) — far shorter
+    // than the build code and carries only what the embed image needs.
+    const EmbedCode =
+      typeof window !== "undefined" ? window.EmbedCode : require("./embedcode.js");
+    return EmbedCode.encode(state, {
+      masteries: window.masteries || window.masterylist,
+      expertise: window.expertise || window.expertiselist,
+      actionlist: window.actionlist,
     });
-    const b64 = url.split("#import.")[1] || "";
-    // base64url so the code is URL-path-safe (no + / =) and needs no encoding.
-    return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   },
 
   // Generate JSON-based build code (most compact and reliable)
@@ -408,8 +421,17 @@ const BuildEncoder = {
             threadCode = part.substring(2).replace(/_/gi, " ");
           if (part.startsWith("note:"))
             note = decodeURIComponent(part.substring(5));
-          if (part.startsWith("a:"))
-            avatarUrl = decodeURIComponent(part.substring(2));
+          if (part.startsWith("a:")) {
+            const av = part.substring(2);
+            if (/^\d+$/.test(av)) {
+              // New compact form: bare user id -> reconstruct medium avatar URL.
+              const shard = Math.floor(parseInt(av, 10) / 1000);
+              avatarUrl = `https://terrarp.com/data/avatars/m/${shard}/${av}.jpg`;
+            } else {
+              // Legacy form: full encoded URL.
+              avatarUrl = decodeURIComponent(av);
+            }
+          }
           if (part.startsWith("ng:")) ng = parseInt(part.substring(3)) || 0;
           if (part.startsWith("b:")) {
             const shortBanner = part.substring(2);
