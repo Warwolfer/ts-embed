@@ -1,39 +1,56 @@
 "use strict";
 const path = require("path");
+const fs = require("fs");
 
-// The vendored browser files assign onto `window` and use btoa/atob.
-// Provide a minimal shim BEFORE requiring them.
+// Minimal browser shim — must exist before any vendored file runs.
 global.window = global.window || {};
-if (typeof global.btoa !== "function") {
+if (typeof global.btoa !== "function")
   global.btoa = (s) => Buffer.from(s, "binary").toString("base64");
-}
-if (typeof global.atob !== "function") {
+if (typeof global.atob !== "function")
   global.atob = (s) => Buffer.from(s, "base64").toString("binary");
-}
-// build-encoder reads window.location.pathname in some paths; stub it.
 global.window.location = global.window.location || { pathname: "/build/" };
 global.window.navigator = global.window.navigator || { userAgent: "node" };
 
-const V = (f) => path.join(__dirname, "..", "vendor", f);
-require(V("safecharacters.js")); // window.charlist
-require(V("masteries.js")); // window.masteries
-require(V("expertise.js")); // window.expertise
-require(V("actions.js")); // window.actionlist
-require(V("build-encoder.js")); // window.BuildEncoder
-require(V("calculations.js")); // window.CharacterCalculations
-const EmbedCode = require(V("embedcode.js")); // bit-packed embed format
+const BASE = "https://terrarp.com/build";
+const REMOTE_FILES = [
+  { url: `${BASE}/resource/safecharacters.js`, vendor: "safecharacters.js" },
+  { url: `${BASE}/resource/masteries.js`,      vendor: "masteries.js" },
+  { url: `${BASE}/resource/expertise.js`,      vendor: "expertise.js" },
+  { url: `${BASE}/resource/actions.js`,        vendor: "actions.js" },
+  { url: `${BASE}/shared/build-encoder.js`,    vendor: "build-encoder.js" },
+  { url: `${BASE}/shared/calculations.js`,     vendor: "calculations.js" },
+  { url: `${BASE}/shared/embedcode.js`,        vendor: "embedcode.js" },
+];
 
-const BuildEncoder = global.window.BuildEncoder;
-const masteries = global.window.masteries;
-const expertise = global.window.expertise;
-const actionlist = global.window.actionlist;
-const calc = global.window.CharacterCalculations;
+function runScript(src, label) {
+  // Wrap in IIFE so top-level `const`/`let` don't bleed between scripts.
+  // eslint-disable-next-line no-new-func
+  new Function("window", "require", `"use strict";\n${src}`)(global.window, require);
+}
+
+async function fetchOrFallback({ url, vendor }) {
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const src = await res.text();
+    console.log(`[build-data] loaded ${url}`);
+    return src;
+  } catch (err) {
+    const fallback = path.join(__dirname, "..", "vendor", vendor);
+    if (fs.existsSync(fallback)) {
+      console.warn(`[build-data] fetch failed for ${url} (${err.message}), using vendor fallback`);
+      return fs.readFileSync(fallback, "utf8");
+    }
+    throw new Error(`fetch failed and no vendor fallback for ${vendor}: ${err.message}`);
+  }
+}
+
+// Populated by init().
+let masteries, expertise, actionlist, calc, EmbedCode, BuildEncoder;
 
 const RANK_LABELS = ["E", "D", "C", "B", "A", "S"];
 function getRankLabel(rank) {
-  if (typeof rank !== "number" || rank < 0 || rank >= RANK_LABELS.length) {
-    return "E";
-  }
+  if (typeof rank !== "number" || rank < 0 || rank >= RANK_LABELS.length) return "E";
   return RANK_LABELS[rank];
 }
 
@@ -44,23 +61,47 @@ class InvalidBuildError extends Error {
   }
 }
 
-// decodeBuildString returns the data object directly on success, or
-// { success:false, error } on failure. Normalize to "data object or throw".
-const REFS = {
-  masteries,
-  expertise,
-  actionlist,
-};
+async function init() {
+  // Fetch all scripts (in parallel), then run them in dependency order.
+  const sources = await Promise.all(REMOTE_FILES.map(fetchOrFallback));
 
-function decode(code) {
-  if (typeof code !== "string" || code.length === 0) {
-    throw new InvalidBuildError("empty code");
+  // Reset window data slots so re-init is clean.
+  delete global.window.masteries;
+  delete global.window.expertise;
+  delete global.window.actionlist;
+  delete global.window.BuildEncoder;
+  delete global.window.CharacterCalculations;
+  delete global.window.EmbedCode;
+  delete global.window.charlist;
+
+  for (let i = 0; i < REMOTE_FILES.length; i++) {
+    runScript(sources[i], REMOTE_FILES[i].vendor);
   }
 
-  // New embedcode format ("~" + base64url bit-pack).
-  if (EmbedCode.isEmbedCode(code)) {
+  masteries    = global.window.masteries;
+  expertise    = global.window.expertise;
+  actionlist   = global.window.actionlist;
+  BuildEncoder = global.window.BuildEncoder;
+  calc         = global.window.CharacterCalculations;
+  EmbedCode    = global.window.EmbedCode;
+
+  if (!masteries || !expertise || !actionlist)
+    throw new Error("build-data init: data arrays missing after script eval");
+}
+
+function getRefs() {
+  return { masteries, expertise, actionlist };
+}
+
+function decode(code) {
+  if (typeof code !== "string" || code.length === 0)
+    throw new InvalidBuildError("empty code");
+
+  const refs = getRefs();
+
+  if (EmbedCode && EmbedCode.isEmbedCode(code)) {
     try {
-      const d = EmbedCode.decode(code, REFS);
+      const d = EmbedCode.decode(code, refs);
       if (!Array.isArray(d.chosenMasteries)) throw new Error("no masteries");
       return d;
     } catch (e) {
@@ -68,8 +109,6 @@ function decode(code) {
     }
   }
 
-  // Legacy: a builder build/share code (base64 or base64url of the compact
-  // string, full or char-stripped). Kept so old embed URLs still render.
   let normalized = code.replace(/-/g, "+").replace(/_/g, "/");
   while (normalized.length % 4 !== 0) normalized += "=";
   let result;
@@ -78,29 +117,23 @@ function decode(code) {
   } catch (e) {
     throw new InvalidBuildError(e.message);
   }
-  if (
-    !result ||
-    result.success === false ||
-    !Array.isArray(result.chosenMasteries)
-  ) {
+  if (!result || result.success === false || !Array.isArray(result.chosenMasteries))
     throw new InvalidBuildError("could not decode build");
-  }
   return result;
 }
 
-// Canonical short embed code (base64url, char data stripped) for a decoded
-// build. Idempotent: canonicalCode(decode(canonicalCode(d))) === canonicalCode(d).
 function canonicalCode(data) {
-  return EmbedCode.encode(data, REFS);
+  return EmbedCode.encode(data, getRefs());
 }
 
 module.exports = {
+  init,
   decode,
   canonicalCode,
-  masteries,
-  expertise,
-  actionlist,
-  calc,
+  get masteries()  { return masteries; },
+  get expertise()  { return expertise; },
+  get actionlist() { return actionlist; },
+  get calc()       { return calc; },
   getRankLabel,
   InvalidBuildError,
 };

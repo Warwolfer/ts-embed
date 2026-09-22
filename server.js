@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const Fastify = require("fastify");
+const bd = require("./src/build-data.js");
 const { buildRender, InvalidBuildError } = require("./src/model.js");
 const { renderWebp } = require("./src/render.js");
 const { getOrRender } = require("./src/lru.js");
@@ -15,6 +16,14 @@ function invalidImage() {
     invalidImg = fs.readFileSync(path.join(__dirname, "assets", "invalid.webp"));
   }
   return invalidImg;
+}
+
+let noShowImg = null;
+function noShowImage() {
+  if (!noShowImg) {
+    noShowImg = fs.readFileSync(path.join(__dirname, "assets", "noshow.webp"));
+  }
+  return noShowImg;
 }
 
 const sha = (s) => crypto.createHash("sha256").update(s).digest("hex");
@@ -31,9 +40,17 @@ function buildServer() {
     const pathOnly = (req.raw.url || "").split("?")[0];
     let raw = pathOnly.slice("/embed/".length);
     if (raw.endsWith(".webp")) raw = raw.slice(0, -".webp".length);
-    const mono = truthy(req.query.mono);
-    const flat = truthy(req.query.flat);
-    const gold = truthy(req.query.gold);
+    const mono    = truthy(req.query.mono);
+    const flat    = truthy(req.query.flat);
+    const gold    = truthy(req.query.gold);
+    const center  = truthy(req.query.center);
+    const compact_mastery = truthy(req.query.compact_mastery);
+    // on-by-default: absence or any value other than "0" means on
+    const mastery   = req.query.mastery   !== "0";
+    const expertise = req.query.expertise !== "0";
+    const saves     = req.query.saves     !== "0";
+    const equipment = req.query.equipment !== "0";
+    const actions   = req.query.actions   !== "0";
 
     if (typeof raw !== "string" || raw.length === 0 || raw.length > 4096) {
       reply
@@ -42,11 +59,24 @@ function buildServer() {
       return reply.send(invalidImage());
     }
 
+    // All content sections hidden → serve static joke image
+    if (!mastery && !expertise && !saves && !equipment && !actions) {
+      reply.header("Content-Type", "image/webp").header("Cache-Control", "public, max-age=86400");
+      return reply.send(noShowImage());
+    }
+
     const code = decodeURIComponent(raw);
     const flagKey =
-      "|mono=" + (mono ? "1" : "0") +
-      "|flat=" + (flat ? "1" : "0") +
-      "|gold=" + (gold ? "1" : "0");
+      "|mono="    + (mono    ? "1" : "0") +
+      "|flat="    + (flat    ? "1" : "0") +
+      "|gold="    + (gold    ? "1" : "0") +
+      "|center="  + (center  ? "1" : "0") +
+      "|cm="      + (compact_mastery ? "1" : "0") +
+      "|m="       + (mastery   ? "1" : "0") +
+      "|ex="      + (expertise ? "1" : "0") +
+      "|sv="      + (saves     ? "1" : "0") +
+      "|eq="      + (equipment ? "1" : "0") +
+      "|ac="      + (actions   ? "1" : "0");
 
     try {
       // Decode up front so the cache key ignores character data + encoding:
@@ -64,7 +94,9 @@ function buildServer() {
       }
 
       const key = sha(imgKey + flagKey);
-      const buf = await getOrRender(key, () => renderWebp(model, { mono, flat, gold }));
+      const buf = await getOrRender(key, () => renderWebp(model, {
+        mono, flat, gold, center, compact_mastery, mastery, expertise, saves, equipment, actions,
+      }));
       reply
         .header("Content-Type", "image/webp")
         .header("Cache-Control", IMMUTABLE);
@@ -85,6 +117,7 @@ function buildServer() {
 }
 
 async function start() {
+  await bd.init();
   const app = buildServer();
   const port = Number(process.env.PORT) || 8080;
   await app.listen({ port, host: "0.0.0.0" });

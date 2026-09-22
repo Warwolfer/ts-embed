@@ -28,9 +28,16 @@ const SCALE = 2; // supersample: rasterize at 2x then downscale for crisp text/e
 
 async function renderWebp(model, opts = {}) {
   const tree = await template(model, {
-    mono: !!opts.mono,
-    flat: !!opts.flat,
-    gold: !!opts.gold,
+    mono:    !!opts.mono,
+    flat:    !!opts.flat,
+    gold:    !!opts.gold,
+    center:  !!opts.center,
+    compact_mastery: !!opts.compact_mastery,
+    mastery:   opts.mastery   !== false,
+    expertise: opts.expertise !== false,
+    saves:     opts.saves     !== false,
+    equipment: opts.equipment !== false,
+    actions:   opts.actions   !== false,
   });
   const svg = await satori(tree, { width: LAYOUT_WIDTH, fonts });
   const png = new Resvg(svg, {

@@ -7,9 +7,16 @@ const byLookup = (list) => {
   for (const o of list) map.set(o.lookup, o);
   return map;
 };
-const M = byLookup(bd.masteries);
-const E = byLookup(bd.expertise);
-const A = byLookup(bd.actionlist);
+
+let _M, _E, _A;
+function getMaps() {
+  if (!_M) {
+    _M = byLookup(bd.masteries);
+    _E = byLookup(bd.expertise);
+    _A = byLookup(bd.actionlist);
+  }
+  return { M: _M, E: _E, A: _A };
+}
 
 const EXCLUDED = new Set(["attack", "rush"]); // universal actions
 const abbr = (name) =>
@@ -37,6 +44,8 @@ function imageKey(d) {
 }
 
 function buildFromData(d) {
+  const { M, E, A } = getMaps();
+
   const masteries = d.chosenMasteries.map((lookup, i) => {
     const o = M.get(lookup) || {};
     return {
@@ -62,13 +71,13 @@ function buildFromData(d) {
   const fmt = (n) => (n >= 0 ? "+" + n : String(n));
   const saves = [
     { key: "Fort", value: fmt(s.fortitude) },
-    { key: "Ref", value: fmt(s.reflex) },
+    { key: "RFLX", value: fmt(s.reflex) },
     { key: "Will", value: fmt(s.will) },
   ];
 
   const gear = [
-    { key: "WPN", type: null, rank: bd.getRankLabel(d.weaponRank) },
-    { key: "ARM", type: d.armorType || null, rank: bd.getRankLabel(d.armorRank) },
+    { key: "WR", type: null, rank: bd.getRankLabel(d.weaponRank) },
+    { key: "AR", type: d.armorType || null, rank: bd.getRankLabel(d.armorRank) },
     { key: "ACC", type: null, rank: bd.getRankLabel(d.accessoryRank) },
   ];
 
