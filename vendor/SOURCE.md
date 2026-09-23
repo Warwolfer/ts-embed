@@ -1,11 +1,16 @@
-# Vendored from ts-builder
+# Vendored from ts-builder — logic only, deliberately frozen
 
-Re-copy these when they change upstream. Source paths (in ts-builder):
-- safecharacters.js  <- resource/safecharacters.js
-- masteries.js       <- resource/masteries.js
-- expertise.js       <- resource/expertise.js
-- actions.js         <- resource/actions.js
-- build-encoder.js   <- shared/build-encoder.js
-- calculations.js    <- shared/calculations.js
+These three files are **not** kept in sync with `ts-builder`, and that is on
+purpose. The embed's code format is its own (see `README.md`), and the old
+startup fetch overwrote these from the builder on every restart, silently
+undoing that difference.
 
-Copied at ts-builder commit: 68f0af2 (uncommitted avatar-id change)
+- `build-encoder.js`  <- ts-builder `shared/build-encoder.js`
+- `calculations.js`   <- ts-builder `shared/calculations.js`
+- `embedcode.js`      <- ts-builder `shared/embedcode.js`
+
+Copied at ts-builder commit: 68f0af2.
+
+The game data is **not** here. It lives in `vendor/game-data/`, a git
+submodule of `ts-game-data`, shared with `ts-builder` and `ts-discord-bot`.
+Run `git submodule update --init --recursive` after cloning.

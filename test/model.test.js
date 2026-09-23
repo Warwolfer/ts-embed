@@ -18,14 +18,18 @@ test("model saves formatted with sign", () => {
   const m = buildModel(FIXTURE);
   assert.deepStrictEqual(m.saves, [
     { key: "Fort", value: "+60" },
-    { key: "Ref", value: "+15" },
+    // "RFLX", not "Ref" -- renamed on purpose in 9a14182; model.js is the
+    // source of truth, this test follows it.
+    { key: "RFLX", value: "+15" },
     { key: "Will", value: "+30" },
   ]);
 });
 
 test("model gear: armor carries its type", () => {
   const m = buildModel(FIXTURE);
-  const arm = m.gear.find((g) => g.key === "ARM");
+  // "AR", not "ARM" -- renamed on purpose in 9a14182; model.js is the source
+  // of truth, this test follows it.
+  const arm = m.gear.find((g) => g.key === "AR");
   assert.strictEqual(arm.type, "heavy");
   assert.strictEqual(arm.rank, "B"); // rank index 3 -> "B"
 });

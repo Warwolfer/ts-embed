@@ -1,0 +1,3 @@
+[submodule "vendor/game-data"]
+	path = vendor/game-data
+	url = git@github.com:Warwolfer/ts-game-data.git
