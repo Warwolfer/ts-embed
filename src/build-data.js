@@ -11,38 +11,31 @@ if (typeof global.atob !== "function")
 global.window.location = global.window.location || { pathname: "/build/" };
 global.window.navigator = global.window.navigator || { userAgent: "node" };
 
-const BASE = "https://terrarp.com/build";
-const REMOTE_FILES = [
-  { url: `${BASE}/resource/safecharacters.js`, vendor: "safecharacters.js" },
-  { url: `${BASE}/resource/masteries.js`,      vendor: "masteries.js" },
-  { url: `${BASE}/resource/expertise.js`,      vendor: "expertise.js" },
-  { url: `${BASE}/resource/actions.js`,        vendor: "actions.js" },
-  { url: `${BASE}/shared/build-encoder.js`,    vendor: "build-encoder.js" },
-  { url: `${BASE}/shared/calculations.js`,     vendor: "calculations.js" },
-  { url: `${BASE}/shared/embedcode.js`,        vendor: "embedcode.js" },
+// Game data comes from the ts-game-data submodule, shared with ts-builder and
+// ts-discord-bot. The three logic files below stay vendored and frozen: the
+// embed's code format is deliberately its own, and the old startup fetch
+// silently overwrote it from the builder on every restart.
+//
+// Nothing is downloaded any more. The embed no longer needs terrarp.com to be
+// reachable to start, and can no longer serve a stale fallback nobody notices.
+const GAME_DATA = path.join(__dirname, "..", "vendor", "game-data");
+const VENDOR = path.join(__dirname, "..", "vendor");
+
+// Order matters: the data must exist before the codecs that read it.
+const LOCAL_FILES = [
+  path.join(GAME_DATA, "safecharacters.js"),
+  path.join(GAME_DATA, "masteries.js"),
+  path.join(GAME_DATA, "expertise.js"),
+  path.join(GAME_DATA, "actions.js"),
+  path.join(VENDOR, "build-encoder.js"),
+  path.join(VENDOR, "calculations.js"),
+  path.join(VENDOR, "embedcode.js"),
 ];
 
 function runScript(src, label) {
   // Wrap in IIFE so top-level `const`/`let` don't bleed between scripts.
   // eslint-disable-next-line no-new-func
   new Function("window", "require", `"use strict";\n${src}`)(global.window, require);
-}
-
-async function fetchOrFallback({ url, vendor }) {
-  try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const src = await res.text();
-    console.log(`[build-data] loaded ${url}`);
-    return src;
-  } catch (err) {
-    const fallback = path.join(__dirname, "..", "vendor", vendor);
-    if (fs.existsSync(fallback)) {
-      console.warn(`[build-data] fetch failed for ${url} (${err.message}), using vendor fallback`);
-      return fs.readFileSync(fallback, "utf8");
-    }
-    throw new Error(`fetch failed and no vendor fallback for ${vendor}: ${err.message}`);
-  }
 }
 
 // Populated by init().
@@ -61,11 +54,8 @@ class InvalidBuildError extends Error {
   }
 }
 
-async function init() {
-  // Fetch all scripts (in parallel), then run them in dependency order.
-  const sources = await Promise.all(REMOTE_FILES.map(fetchOrFallback));
-
-  // Reset window data slots so re-init is clean.
+function loadAll() {
+  // Reset window data slots so a re-load is clean.
   delete global.window.masteries;
   delete global.window.expertise;
   delete global.window.actionlist;
@@ -74,8 +64,14 @@ async function init() {
   delete global.window.EmbedCode;
   delete global.window.charlist;
 
-  for (let i = 0; i < REMOTE_FILES.length; i++) {
-    runScript(sources[i], REMOTE_FILES[i].vendor);
+  for (const file of LOCAL_FILES) {
+    if (!fs.existsSync(file)) {
+      throw new Error(
+        `build-data: ${path.relative(path.join(__dirname, ".."), file)} is missing. ` +
+          "Run: git submodule update --init --recursive"
+      );
+    }
+    runScript(fs.readFileSync(file, "utf8"), path.basename(file));
   }
 
   masteries    = global.window.masteries;
@@ -86,7 +82,16 @@ async function init() {
   EmbedCode    = global.window.EmbedCode;
 
   if (!masteries || !expertise || !actionlist)
-    throw new Error("build-data init: data arrays missing after script eval");
+    throw new Error("build-data: data arrays missing after script eval");
+}
+
+// Load at require time. Reading from disk needs no await, and every consumer
+// (src/model.js, the test suite) uses decode() without calling init() first.
+loadAll();
+
+// Kept async, and kept exported, because server.js awaits it before listening.
+async function init() {
+  loadAll();
 }
 
 function getRefs() {

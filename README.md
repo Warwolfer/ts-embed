@@ -66,10 +66,10 @@ same image, so a cache miss just costs one ~50ms render.
 
 ## Vendoring
 
-`vendor/` holds byte-copies of the decode + data files from `ts-builder`
-(`resource/masteries.js`, `expertise.js`, `actions.js`, `safecharacters.js`,
-`shared/build-encoder.js`, `calculations.js`). **Re-copy them when they change
-upstream** — see `vendor/SOURCE.md`.
+`vendor/game-data/` is a git submodule of `ts-game-data`, the one copy of the
+game data, shared with `ts-builder` and `ts-discord-bot`. `vendor/` also holds
+three decode files copied from `ts-builder` and deliberately frozen — see
+`vendor/SOURCE.md`. Nothing is fetched over the network at startup any more.
 
 ## Stack
 
