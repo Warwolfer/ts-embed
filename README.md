@@ -6,12 +6,21 @@ transparent WebP for forum `[IMG]` embedding ("Design 4" layout).
 ## Run
 
 ```bash
+git submodule update --init --recursive   # populate vendor/game-data/
 pnpm install
 cp .env.example .env   # set PORT / PUBLIC_BASE_URL
 pnpm start             # or: pm2 start ecosystem.config.js
 ```
 
 `pnpm test` runs the suite (`node --test`).
+
+**A deploy must run `git submodule update --init --recursive` too, after every
+pull.** There is no deploy script here — deployment is `git pull` plus a pm2
+restart on the VPS. A plain `git pull` moves the submodule pointer but does
+**not** populate `vendor/game-data/`; if that directory is missing or stale,
+`require("./src/build-data")` throws at startup and pm2 restarts forever.
+Run the submodule update as part of every pull-and-restart, not just on first
+clone.
 
 ## Endpoint
 
@@ -70,6 +79,18 @@ same image, so a cache miss just costs one ~50ms render.
 game data, shared with `ts-builder` and `ts-discord-bot`. `vendor/` also holds
 three decode files copied from `ts-builder` and deliberately frozen — see
 `vendor/SOURCE.md`. Nothing is fetched over the network at startup any more.
+
+### Changing the game data
+
+Do not edit anything under `vendor/game-data/` in this repo — it is a
+read-only checkout of `ts-game-data`. To change masteries, actions, expertise
+or the other data files:
+
+1. Edit them in the `ts-game-data` repo, commit and push there.
+2. Back in this repo: `git submodule update --remote`, run `pnpm test`, then
+   commit the bumped submodule pointer.
+3. Deploy as usual (`git pull` then `git submodule update --init --recursive`
+   before restarting pm2 — see "Run" above).
 
 ## Stack
 
