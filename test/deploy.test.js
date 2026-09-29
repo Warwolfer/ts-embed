@@ -126,6 +126,34 @@ test("--dry-run runs every local check, prints the SSH command and never calls s
   assert.ok(lines.some((l) => l.includes(ship.remoteCommand(SHA))), lines.join("\n"));
 });
 
+test("--adopt runs the local checks, then sends vps-adopt.sh over ssh stdin with LF endings", async () => {
+  // Break: send the script as it is on disk (CRLF on a Windows checkout).
+  const { run, calls } = fakeRun();
+  const sent = [];
+  const ssh = (host, command, input) => { sent.push({ host, command, input }); return { status: 0 }; };
+  const script = "#!/usr/bin/env bash\r\necho one\r\necho two\r\n";
+  await ship.ship({ argv: ["--adopt"], run, ssh, readScript: () => script, ...quiet });
+  assert.deepStrictEqual(calls, LOCAL_STEPS);
+  assert.deepStrictEqual(sent, [{ host: ship.HOST, command: `bash -s -- ${SHA}`, input: "#!/usr/bin/env bash\necho one\necho two\n" }]);
+});
+
+test("--adopt --dry-run sends nothing", async () => {
+  // Break: send the script in dry run too.
+  const { run } = fakeRun();
+  const sent = [];
+  await ship.ship({ argv: ["--adopt", "--dry-run"], run, ssh: (...a) => { sent.push(a); return { status: 0 }; }, readScript: () => "x\n", ...quiet });
+  assert.deepStrictEqual(sent, []);
+});
+
+test("sshSpawn passes stdin through when given, still with no shell", () => {
+  // Break: drop `input` from the spawn options.
+  const seen = [];
+  ship.sshSpawn(ship.HOST, "bash -s", (cmd, args, o) => { seen.push(o); return { status: 0 }; }, "echo hi\n");
+  assert.strictEqual(seen[0].input, "echo hi\n");
+  assert.ok(!seen[0].shell);
+  assert.deepStrictEqual(seen[0].stdio, ["pipe", "inherit", "inherit"]);
+});
+
 test("deploy.sh runs scripts/deploy.js with its arguments", () => {
   // Break: drop "$@" from deploy.sh.
   const sh = fs.readFileSync(path.join(__dirname, "..", "deploy.sh"), "utf8");

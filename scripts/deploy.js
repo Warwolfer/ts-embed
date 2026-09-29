@@ -4,6 +4,7 @@
 //
 //   bash deploy.sh             # every local check, then the VPS deploy over SSH
 //   bash deploy.sh --dry-run   # every local check; print the SSH command, run nothing remote
+//   bash deploy.sh --adopt     # ONCE, first: make ~/ts-embed a git checkout (vps-adopt.sh)
 //
 // Local checks, in order, the first failure stops everything:
 //   no uncommitted change at all (it never touches the tree); `git fetch
@@ -19,6 +20,7 @@
 // VPS copy to be a git checkout: scripts/vps-adopt.sh, once.
 "use strict";
 const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
 const path = require("node:path");
 const { SHA_RE } = require("./vps-deploy.js");
 
@@ -54,11 +56,19 @@ function localRun(cmd, args, { capture = false } = {}) {
   return { status: result.error ? 1 : result.status, stdout: result.stdout || "" };
 }
 
-/** ssh with no shell: the host and the command are two separate arguments. */
-function sshSpawn(host, command, spawn = spawnSync) {
-  const result = spawn("ssh", [host, command], { stdio: "inherit", shell: false });
+/**
+ * ssh with no shell: the host and the command are two separate arguments.
+ * With `input`, that text is the remote command's stdin (for --adopt).
+ */
+function sshSpawn(host, command, spawn = spawnSync, input = null) {
+  const opts = input === null
+    ? { stdio: "inherit", shell: false }
+    : { stdio: ["pipe", "inherit", "inherit"], shell: false, input };
+  const result = spawn("ssh", [host, command], opts);
   return { status: result.error ? 1 : result.status };
 }
+
+const ADOPT_SCRIPT = path.join(__dirname, "vps-adopt.sh");
 
 /** Every local check; returns the SHA that may ship. */
 function localChecks(run, log) {
@@ -90,9 +100,32 @@ function localChecks(run, log) {
   return head;
 }
 
-async function ship({ argv, run = localRun, ssh = sshSpawn, log = (line) => console.log(line) }) {
+async function ship({
+  argv,
+  run = localRun,
+  ssh = (host, command, input) => sshSpawn(host, command, spawnSync, input),
+  readScript = () => fs.readFileSync(ADOPT_SCRIPT, "utf8"),
+  log = (line) => console.log(line),
+}) {
   const dryRun = argv.includes("--dry-run");
   const sha = localChecks(run, log);
+
+  if (argv.includes("--adopt")) {
+    // Once: make ~/ts-embed a clean git checkout (scripts/vps-adopt.sh). The
+    // script goes over stdin with LF endings: a Windows checkout has CRLF,
+    // which bash on the VPS would read as part of each command.
+    const command = `bash -s -- ${sha}`;
+    if (dryRun) {
+      log(`== dry run: would send scripts/vps-adopt.sh to ${HOST} and run: ${command}`);
+      return;
+    }
+    log(`== switching ~/ts-embed on ${HOST} to a git checkout of ${sha}`);
+    const result = ssh(HOST, command, readScript().replace(/\r\n/g, "\n"));
+    if (result.status !== 0) throw new Error(`the switch on the VPS failed (exit ${result.status}); see its output above`);
+    log("== done: ~/ts-embed is a git checkout; the old folder is ~/ts-embed-old");
+    return;
+  }
+
   const command = remoteCommand(sha);
   if (dryRun) {
     log(`== dry run: would run on ${HOST}:`);
