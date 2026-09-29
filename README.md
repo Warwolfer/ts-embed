@@ -14,13 +14,35 @@ pnpm start             # or: pm2 start ecosystem.config.js
 
 `pnpm test` runs the suite (`node --test`).
 
-**A deploy must run `git submodule update --init --recursive` too, after every
-pull.** There is no deploy script here — deployment is `git pull` plus a pm2
-restart on the VPS. A plain `git pull` moves the submodule pointer but does
-**not** populate `vendor/game-data/`; if that directory is missing or stale,
-`require("./src/build-data")` throws at startup and pm2 restarts forever.
-Run the submodule update as part of every pull-and-restart, not just on first
-clone.
+## Deploy
+
+From this PC (Git Bash), on `master`, clean and pushed:
+
+```bash
+bash deploy.sh --adopt    # ONCE, first: make ~/ts-embed on the VPS a clean git checkout
+bash deploy.sh --dry-run  # every local check; prints the SSH command, runs nothing remote
+bash deploy.sh            # deploy
+```
+
+`deploy.sh` (all of it in `scripts/deploy.js`) checks here (no uncommitted
+change, `master` equal to `origin/master`, the submodule at its pointer,
+`node --test`), then over SSH records the VPS checkout's commit, fast-forwards
+it to the checked one and runs `scripts/vps-deploy.js` there: submodules,
+`pnpm install --frozen-lockfile`, `node --test`, `pm2 startOrReload
+ecosystem.config.js`, and `GET /health`. Any failure after the pull resets the
+VPS checkout to the previous commit and reloads it; a VPS checkout with a hand
+edit is refused and never reset. `--adopt` (`scripts/vps-adopt.sh`) clones
+next to the old folder, copies its `.env`, tests, swaps the two and checks
+`/health`, putting the old folder back on failure; it deletes nothing.
+
+**The submodule matters on every pull.** A plain `git pull` moves the
+submodule pointer but does **not** populate `vendor/game-data/`; if that
+directory is missing or stale, `require("./src/build-data")` throws at startup
+and pm2 restarts forever. The deploy runs `git submodule update --init
+--recursive` every time.
+
+To deploy all three services together, or bump the game data in all three,
+see `ts-game-data`'s README (`deploy-all.sh`, `bump-game-data.sh`).
 
 ## Endpoint
 
