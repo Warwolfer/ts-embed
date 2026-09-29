@@ -12,7 +12,29 @@ const { spawnSync } = require("node:child_process");
 
 const SCRIPT = path.join(__dirname, "..", "scripts", "vps-adopt.sh");
 const SHA = "0123456789abcdef0123456789abcdef01234567";
-const HAS_BASH = spawnSync("bash", ["-c", "true"]).status === 0;
+
+/**
+ * The bash to run the script with. On Windows it must be Git for Windows' own
+ * bash: from cmd (or cmder), `bash` on the PATH is often WSL's
+ * (C:\Windows\System32\bash.exe), which cannot see this test's /d/... paths
+ * and would make every case fail, or pass for the wrong reason. And it must be
+ * Git's inner usr\bin\bash.exe, not its bin\bash.exe launcher: the launcher
+ * puts Git's own folders first on PATH, so the stubs below lose to the real
+ * git (which then tries to clone from GitHub). Elsewhere, plain `bash`. Null
+ * when there is none (the tests skip).
+ */
+function findBash() {
+  if (process.platform !== "win32") return spawnSync("bash", ["-c", "true"]).status === 0 ? "bash" : null;
+  const roots = [process.env.ProgramFiles, process.env.ProgramW6432].filter(Boolean).map((r) => path.win32.join(r, "Git"));
+  if (process.env.LOCALAPPDATA) roots.push(path.win32.join(process.env.LOCALAPPDATA, "Programs", "Git"));
+  for (const root of roots) {
+    const candidate = path.win32.join(root, "usr", "bin", "bash.exe");
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+const BASH = findBash();
+const HAS_BASH = BASH !== null;
 
 /** The stubs. Each logs its call to $HOME/calls.log. */
 const STUBS = {
@@ -51,9 +73,15 @@ function world({ env = true } = {}) {
 function adopt(home, args, extraEnv = {}) {
   // Unix-style paths for bash on Windows (C:\x -> /c/x).
   const unix = (p) => p.replace(/\\/g, "/").replace(/^([A-Za-z]):/, (m, d) => `/${d.toLowerCase()}`);
-  const result = spawnSync("bash", [unix(SCRIPT), ...args], {
+  // The stubs first; then, on Windows, Git's usr/bin (bash for the stubs'
+  // `#!/usr/bin/env bash`, and cp and mv for the script), which cmd's PATH
+  // may not have. It holds no git, pnpm, node, pm2 or curl.
+  const gitUsrBin = process.platform === "win32" ? `${unix(path.dirname(BASH))}:` : "";
+  const result = spawnSync(BASH, [unix(SCRIPT), ...args], {
     encoding: "utf8",
-    env: { ...process.env, HOME: unix(home), PATH: `${unix(path.join(home, "bin"))}:${process.env.PATH}`, ...extraEnv },
+    // GIT_SSH_COMMAND=false: if a real git ever ran instead of the stub, it
+    // could not reach GitHub.
+    env: { ...process.env, HOME: unix(home), PATH: `${unix(path.join(home, "bin"))}:${gitUsrBin}${process.env.PATH}`, GIT_SSH_COMMAND: "false", ...extraEnv },
   });
   const log = fs.existsSync(path.join(home, "calls.log")) ? fs.readFileSync(path.join(home, "calls.log"), "utf8") : "";
   return { ...result, log };
@@ -125,6 +153,19 @@ test("it refuses, touching nothing, on a bad SHA, a missing .env, a clone at ano
   const got = adopt(home, [SHA]);
   assert.notStrictEqual(got.status, 0);
   assert.doesNotMatch(got.log, /git clone/);
+  fs.rmSync(home, { recursive: true, force: true });
+});
+
+test("the stubs win: no real git, pnpm, node, pm2 or curl runs (review of Phase 8b's Windows run)", { skip: !HAS_BASH }, () => {
+  // Break: run the script with Git's bin\bash.exe launcher (it puts Git's own
+  // folders first on PATH, so the real git is found before the stub).
+  const home = world();
+  const got = adopt(home, [SHA]);
+  assert.strictEqual(got.status, 0, got.stderr + got.stdout);
+  assert.doesNotMatch(got.stdout + got.stderr, /Cloning into|fatal:/);
+  for (const tool of ["git clone", "pnpm install", "node --test", "pm2 startOrReload", "curl"]) {
+    assert.match(got.log, new RegExp(`^${tool}`, "m"), `${tool} did not go through its stub`);
+  }
   fs.rmSync(home, { recursive: true, force: true });
 });
 
