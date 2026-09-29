@@ -10,9 +10,13 @@
 // Steps, in order; the first failure stops everything after it:
 //   Node >= 22.22.2; HEAD is exactly <sha>; no tracked change; the game-data
 //   submodule updated and at its committed pointer; pnpm install
-//   --frozen-lockfile; node --test; pm2 startOrReload through
-//   ecosystem.config.js; GET http://127.0.0.1:4567/health answering
-//   {"status":"ok"} (10 tries, 500 ms apart).
+//   --frozen-lockfile; pm2 startOrReload through ecosystem.config.js;
+//   GET http://127.0.0.1:4567/health answering {"status":"ok"} (10 tries,
+//   500 ms apart).
+//
+// No tests here: deploy.sh ran them on the PC against this exact commit (the
+// owner's call, to make deploys faster). The health check and the rollback
+// still guard the live service.
 //
 // Rollback (K188, approved by the owner): once the checkout is known to hold
 // no tracked change, any later failure runs `git reset --hard <prev>`, the
@@ -139,7 +143,6 @@ async function runDeploy(opts) {
     const status = read("git", ["submodule", "status", SUBMODULE]);
     if (status[0] !== " ") throw new Error(`${SUBMODULE} is not at its committed pointer (${JSON.stringify(status.trim())})`);
     step("install", "pnpm", ["install", "--frozen-lockfile"]);
-    step("node --test", "node", ["--test"]);
     step("pm2", "pm2", PM2_ARGS);
     log("== health");
     for (let i = 0; i < HEALTH_TRIES; i++) {

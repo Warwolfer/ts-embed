@@ -34,7 +34,6 @@ const STEPS = [
   "git submodule update --init --recursive",
   "git submodule status vendor/game-data",
   "pnpm install --frozen-lockfile",
-  "node --test",
   "pm2 startOrReload ecosystem.config.js --update-env",
 ];
 
@@ -47,8 +46,8 @@ test("a SHA or a previous SHA that is not 40 lowercase hex is refused before any
   }
 });
 
-test("the steps run in K188's order, then health", async () => {
-  // Break: swap the install and the tests.
+test("the steps run in K188's order, then health; no tests on the VPS (deploy.sh ran them on the PC)", async () => {
+  // Break: run node --test on the VPS again.
   const { run, calls } = fakeRun();
   let asked = null;
   await deploy.runDeploy(opts({ run, fetchText: async (url) => { asked = url; return healthy(); } }));
@@ -93,9 +92,9 @@ test("a stale submodule stops it and rolls back", async () => {
 
 test("a failing step after the pull rolls back to the previous commit and reloads it", async () => {
   // Break: throw without rolling back.
-  const { run, calls } = fakeRun({ "node --test": { status: 1, stdout: "" } });
+  const { run, calls } = fakeRun({ "pm2 startOrReload ecosystem.config.js --update-env": { status: 1, stdout: "" } });
   await assert.rejects(deploy.runDeploy(opts({ run })), /rolled back/);
-  const after = calls.slice(calls.indexOf("node --test") + 1);
+  const after = calls.slice(calls.indexOf("pm2 startOrReload ecosystem.config.js --update-env") + 1);
   assert.deepStrictEqual(after, [
     `git reset --hard ${PREV}`,
     "git submodule update --init --recursive",
@@ -124,7 +123,7 @@ test("health wants 200 and status ok, and retries while the server comes up", as
 
 test("when the pull changed nothing (PREV = SHA), a failure does not reset", async () => {
   // Break: always reset.
-  const { run, calls } = fakeRun({ "node --test": { status: 1, stdout: "" } });
+  const { run, calls } = fakeRun({ "pnpm install --frozen-lockfile": { status: 1, stdout: "" } });
   await assert.rejects(deploy.runDeploy(opts({ run, prev: SHA })), /failed/);
   assert.ok(!calls.some((c) => c.startsWith("git reset")));
 });
