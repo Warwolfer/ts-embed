@@ -13,7 +13,7 @@
 //   pointer; node --test.
 // Then one SSH call: record the VPS checkout's commit as PREV, fast-forward
 // ~/ts-embed to the checked commit, and run scripts/vps-deploy.js there
-// (submodules, install, tests, pm2 reload, health, and a rollback to PREV on
+// (submodules, install, pm2 reload, health, and a rollback to PREV on
 // any failure).
 //
 // Auth is the SSH key already used for this host. The first deploy needs the

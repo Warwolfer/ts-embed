@@ -28,8 +28,9 @@ bash deploy.sh            # deploy
 change, `master` equal to `origin/master`, the submodule at its pointer,
 `node --test`), then over SSH records the VPS checkout's commit, fast-forwards
 it to the checked one and runs `scripts/vps-deploy.js` there: submodules,
-`pnpm install --frozen-lockfile`, `node --test`, `pm2 startOrReload
-ecosystem.config.js`, and `GET /health`. Any failure after the pull resets the
+`pnpm install --frozen-lockfile`, `pm2 startOrReload ecosystem.config.js`, and
+`GET /health` (no tests on the VPS: they just ran here, on the same commit).
+Any failure after the pull resets the
 VPS checkout to the previous commit and reloads it; a VPS checkout with a hand
 edit is refused and never reset. `--adopt` (`scripts/vps-adopt.sh`) clones
 next to the old folder, copies its `.env`, tests, swaps the two and checks
