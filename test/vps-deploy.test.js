@@ -17,7 +17,7 @@ function fakeRun(overrides = {}) {
     calls.push(line);
     if (line in overrides) return overrides[line];
     if (line === "git rev-parse HEAD") return { status: 0, stdout: SHA + "\n" };
-    if (line === "git status --porcelain --untracked-files=no") return { status: 0, stdout: "" };
+    if (line === "git status --porcelain --untracked-files=no --ignore-submodules") return { status: 0, stdout: "" };
     if (line === "git submodule status vendor/game-data") return { status: 0, stdout: " c5549ea vendor/game-data (heads/main)\n" };
     return { status: 0, stdout: "" };
   };
@@ -30,7 +30,7 @@ const opts = (extra) => ({ sha: SHA, prev: PREV, version: "24.5.0", fetchText: h
 
 const STEPS = [
   "git rev-parse HEAD",
-  "git status --porcelain --untracked-files=no",
+  "git status --porcelain --untracked-files=no --ignore-submodules",
   "git submodule update --init --recursive",
   "git submodule status vendor/game-data",
   "pnpm install --frozen-lockfile",
@@ -74,7 +74,7 @@ test("HEAD not at the SHA stops it, with no rollback", async () => {
 
 test("a tracked change on the VPS stops it and is never reset", async () => {
   // Break: roll back on this failure too.
-  const { run, calls } = fakeRun({ "git status --porcelain --untracked-files=no": { status: 0, stdout: " M server.js\n" } });
+  const { run, calls } = fakeRun({ "git status --porcelain --untracked-files=no --ignore-submodules": { status: 0, stdout: " M server.js\n" } });
   await assert.rejects(deploy.runDeploy(opts({ run })), /uncommitted/);
   assert.ok(!calls.some((c) => c.startsWith("git reset")), calls.join("\n"));
   assert.ok(!calls.includes("pnpm install --frozen-lockfile"));

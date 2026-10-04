@@ -128,7 +128,9 @@ async function runDeploy(opts) {
   // VPS was edited by hand. Neither failure resets anything.
   const head = read("git", ["rev-parse", "HEAD"]).trim();
   if (head !== sha) throw new Error(`HEAD is ${head}, not ${sha}; nothing was changed`);
-  if (read("git", ["status", "--porcelain", "--untracked-files=no"]).trim() !== "") {
+  // Submodules are left out: a game-data bump's pull leaves the pointer
+  // "modified" until the update below, and the check after it covers them.
+  if (read("git", ["status", "--porcelain", "--untracked-files=no", "--ignore-submodules"]).trim() !== "") {
     throw new Error(`the checkout has uncommitted changes to tracked files; nothing was reset (HEAD is ${sha}, it was ${prev})`);
   }
 
